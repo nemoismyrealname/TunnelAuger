@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:block/cube_all",
+  "textures": {
+    "all": "tunnel_auger:block/builders_philosopher_stone"
+  }
+}
