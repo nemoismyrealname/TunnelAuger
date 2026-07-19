@@ -1,5 +1,10 @@
 {
-  "item.tunnel_auger.tunnel_auger": "Земляной бур",
+  "item.tunnel_auger.tunnel_auger": "Крушитель",
+  "item.tunnel_auger.tunnel_auger.line_level": " §8┃ §7Тир §e%d",
+  "item.tunnel_auger.tunnel_auger.line_area": " §8│ §b%d×%d",
+  "item.tunnel_auger.tunnel_auger.line_progress": " §8┃ §7§o%d§8/§7§o%d",
+  "item.tunnel_auger.tunnel_auger.line_ready": " §a▸ Готов!",
+  "item.tunnel_auger.tunnel_auger.line_progress_max": " §8┃ §7Всего: §e%d §7блоков добыто",
   "block.tunnel_auger.builders_philosopher_stone": "Философский камень строителя",
   "itemGroup.tunnel_auger": "Tunnel Auger"
 }

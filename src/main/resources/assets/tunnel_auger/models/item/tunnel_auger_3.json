@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/handheld",
+  "textures": {
+    "layer0": "tunnel_auger:item/tunnel_auger_3"
+  }
+}

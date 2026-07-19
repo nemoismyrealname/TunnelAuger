@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 
 import com.example.tunnelauger.block.ModBlocks;
 import com.example.tunnelauger.block.entity.ModBlockEntities;
+import com.example.tunnelauger.handler.AugerMiningHandler;
 import com.example.tunnelauger.item.ModComponents;
 import com.example.tunnelauger.item.ModItems;
 
@@ -26,6 +27,7 @@ public class TunnelAugerMod implements ModInitializer {
         ModItems.register();
         ModBlocks.register();
         ModBlockEntities.register();
+        AugerMiningHandler.register();
 
         LOGGER.info("[TunnelAuger] мод загружен");
     }

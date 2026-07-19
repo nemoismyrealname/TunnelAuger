@@ -1,6 +1,34 @@
 {
   "model": {
-    "type": "minecraft:model",
-    "model": "tunnel_auger:item/tunnel_auger"
+    "type": "minecraft:select",
+    "property": "minecraft:component",
+    "component": "tunnel_auger:auger_level",
+    "cases": [
+      {
+        "when": 1,
+        "model": {
+          "type": "minecraft:model",
+          "model": "tunnel_auger:item/tunnel_auger_1"
+        }
+      },
+      {
+        "when": 2,
+        "model": {
+          "type": "minecraft:model",
+          "model": "tunnel_auger:item/tunnel_auger_2"
+        }
+      },
+      {
+        "when": 3,
+        "model": {
+          "type": "minecraft:model",
+          "model": "tunnel_auger:item/tunnel_auger_3"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:model",
+      "model": "tunnel_auger:item/tunnel_auger_0"
+    }
   }
 }

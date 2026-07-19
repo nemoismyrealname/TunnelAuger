@@ -13,21 +13,28 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Rarity;
 import net.minecraft.world.item.ToolMaterial;
+
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.level.block.Block;
 
 /**
  * Все предметы мода регистрируются здесь, в одном месте — так проще
  * поддерживать список при переходе на новые версии игры.
  *
- * TUNNEL_AUGER сейчас — полноценная кирка по характеристикам (материал
- * "как железо"), но пока без площадной копки и без уровней — это
- * следующие шаги. Площадная копка и прогрессия будут жить в отдельном
- * обработчике, а не здесь, чтобы не смешивать регистрацию и поведение.
+ * TUNNEL_AUGER — кастомная кирка (TunnelAugerItem):
+ * <ul>
+ *   <li>Уровень 0 — железный уровень (6.0 скорость, 500 прочность)</li>
+ *   <li>Уровень 1 — алмазный уровень (8.0 скорость, 1561 прочность, копка 3×3)</li>
+ * </ul>
+ *
+ * В креативе выдаётся бур уровня 0 — игроку нужно накопать 200 блоков
+ * и провести ритуал на Философском камне, чтобы улучшить до уровня 1.
  */
 public final class ModItems {
 
-    /** Блоки, которые бур не может нормально добыть — как у железного инструмента. */
+    /** Блоки, которые бур не может нормально добыть (указывает на #minecraft:incorrect_for_diamond_tool). */
     public static final TagKey<Block> INCORRECT_FOR_TUNNEL_AUGER = TagKey.create(
             BuiltInRegistries.BLOCK.key(),
             Identifier.fromNamespaceAndPath(TunnelAugerMod.MOD_ID, "incorrect_for_tunnel_auger")
@@ -39,20 +46,35 @@ public final class ModItems {
             Identifier.fromNamespaceAndPath(TunnelAugerMod.MOD_ID, "repairs_tunnel_auger")
     );
 
+    // ── Материал бура ────────────────────────────
+    //
+    // Базовая регистрация — на железном уровне (500 прочность, 6.0 скорость).
+    // Все level-зависимые штуки (скорость, правильный инструмент для дропа,
+    // корректный тег неправильных блоков) переопределены в TunnelAugerItem
+    // и смотрят на AugerProgress.level. Алмазные характеристики для level=1
+    // задаются там же, в коде предмета.
+
     public static final ToolMaterial TUNNEL_AUGER_MATERIAL = new ToolMaterial(
             INCORRECT_FOR_TUNNEL_AUGER,
             500,    // прочность
-            6.0F,   // скорость копки (как у железа)
-            1.0F,   // бонус к урону в ближнем бою
+            6.0F,   // скорость копки
+            1.0F,   // бонус к урону
             14,     // зачаровываемость
             REPAIRS_TUNNEL_AUGER
     );
 
+    // ── Предмет ─────────────────────────────────────────
+
     public static final Item TUNNEL_AUGER = register(
             "tunnel_auger",
-            settings -> new Item(settings
-                    .pickaxe(TUNNEL_AUGER_MATERIAL, 1.0F, -2.8F)
-                    .component(ModComponents.AUGER_PROGRESS, AugerProgress.INITIAL))
+            settings -> new TunnelAugerItem(
+                    TUNNEL_AUGER_MATERIAL,
+                    1.0F,     // бонус атаки базовый (поверх материала)
+                    -2.8F,    // скорость атаки
+                    settings.component(ModComponents.AUGER_PROGRESS, AugerProgress.INITIAL)
+                            .component(ModComponents.AUGER_LEVEL, 0)
+                            .component(DataComponents.RARITY, AugerProgress.rarityForLevel(0))
+            )
     );
 
     private ModItems() {

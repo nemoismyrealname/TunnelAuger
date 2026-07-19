@@ -24,7 +24,12 @@ public final class RitualRecipes {
                             Items.DIAMOND, 1
                     ),
                     new ItemStack(ModItems.TUNNEL_AUGER)
-            )
+            ),
+
+            new RitualRecipe(
+                    Map.of(Items.COBBLESTONE, 3),
+                    new ItemStack(Items.STONE_PICKAXE)
+    )
     );
 
     private RitualRecipes() {

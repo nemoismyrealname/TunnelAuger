@@ -15,6 +15,13 @@ public final class ModComponents {
             DataComponentType.<AugerProgress>builder().persistent(AugerProgress.CODEC).build()
     );
 
+    /** Для визуального переключения модели: хранит только уровень (int), чтобы модель могла на него ссылаться. */
+    public static final DataComponentType<Integer> AUGER_LEVEL = Registry.register(
+            BuiltInRegistries.DATA_COMPONENT_TYPE,
+            Identifier.fromNamespaceAndPath(TunnelAugerMod.MOD_ID, "auger_level"),
+            DataComponentType.<Integer>builder().persistent(com.mojang.serialization.Codec.INT).build()
+    );
+
     private ModComponents() {
     }
 
