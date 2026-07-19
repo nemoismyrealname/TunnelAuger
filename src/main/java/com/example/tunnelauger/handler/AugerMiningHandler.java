@@ -9,6 +9,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
@@ -21,13 +23,18 @@ import net.minecraft.world.level.block.state.BlockState;
 /**
  * Fabric-событие, которое срабатывает после разрушения блока игроком.
  * <p>
- * Считает накопанные блоки в {@link com.example.tunnelauger.item.AugerProgress},
+ * Считает накопанные блоки в {@link AugerProgress},
  * а на уровне 1+ ломает блоки в области: 3×3, 5×5 или 7×7.
+ * Геометрия области (ориентация по взгляду, список позиций) вынесена
+ * в {@link AugerAreaShape} — её же использует клиентская обводка области.
  * <p>
- * Направление копки зависит от взгляда игрока:
+ * QoL-правила:
  * <ul>
- *   <li>Смотрит прямо (|pitch| &lt; 45°) — вертикальная стенка</li>
- *   <li>Смотрит вниз/вверх (|pitch| ≥ 45°) — горизонтальная площадка</li>
+ *   <li><b>Shift</b> отключает площадную копку — точная работа одним блоком;</li>
+ *   <li>бур <b>никогда не ломается</b> от площадной копки: когда остаётся
+ *       1 прочности — область перестаёт копаться (износ при этом
+ *       честный: 1 прочность за каждый сломанный блок);</li>
+ *   <li>при достижении порога апгрейда — только короткий звук, без текста на экране.</li>
  * </ul>
  * В области копаются только блоки из тега {@code #minecraft:mineable/pickaxe}.
  * В креативе дроп из area mining не выпадает.
@@ -51,7 +58,6 @@ public final class AugerMiningHandler {
     );
 
     private static boolean isBreakingArea = false;
-    private static final float PITCH_THRESHOLD = 45.0f;
 
     private AugerMiningHandler() {
     }
@@ -68,13 +74,14 @@ public final class AugerMiningHandler {
     }
 
     private static void handleBreak(Level level, BlockPos pos, BlockState state, Player player, ItemStack stack) {
-        AugerProgress progress = stack.getOrDefault(ModComponents.AUGER_PROGRESS, AugerProgress.INITIAL);
-
         if (!state.isAir() && state.getDestroySpeed(level, pos) >= 0) {
-            stack.set(ModComponents.AUGER_PROGRESS,
-                    progress.withMinedBlocks(progress.minedBlocks() + 1));
+            addProgress(stack, player, 1);
         }
 
+        // ── Shift = точная копка одним блоком, без области ──
+        if (player.isShiftKeyDown()) return;
+
+        AugerProgress progress = stack.getOrDefault(ModComponents.AUGER_PROGRESS, AugerProgress.INITIAL);
         int areaSize = AugerProgress.areaSize(progress.level());
         if (areaSize > 1) {
             breakArea(level, pos, player, stack, progress, areaSize);
@@ -94,76 +101,35 @@ public final class AugerMiningHandler {
                     ? INCORRECT_FOR_DIAMOND
                     : INCORRECT_FOR_IRON;
 
-            float pitch = player.getXRot();
+            boolean isCreative = player.getAbilities().instabuild;
+
+            // ── Бюджет прочности: оставляем минимум 1, чтобы бур
+            //     никогда не ломался от площадной копки ──
+            int budget = isCreative
+                    ? Integer.MAX_VALUE
+                    : stack.getMaxDamage() - stack.getDamageValue() - 1;
+            if (budget <= 0) return;
+
+            AugerAreaShape.Orientation orientation =
+                    AugerAreaShape.orientationFor(player.getYRot(), player.getXRot());
             int radius = (size - 1) / 2; // 3→1, 5→2, 7→3
 
-            if (Math.abs(pitch) < PITCH_THRESHOLD) {
-                breakVerticalWall(level, center, player, stack, incorrectTag, radius);
-            } else {
-                breakHorizontalFloor(level, center, player, stack, incorrectTag, radius);
+            int blocksBroken = 0;
+            for (BlockPos target : AugerAreaShape.positions(center, orientation, radius)) {
+                if (blocksBroken >= budget) break;
+                if (tryBreakAt(level, target, player, stack, incorrectTag, isCreative)) {
+                    blocksBroken++;
+                }
+            }
+
+            // ── Износ: 1 прочность × количество сломанных блоков,
+            //     плюс ванильное истощение голода (0.005 за блок, как в ванили) ──
+            if (blocksBroken > 0 && !isCreative) {
+                stack.hurtAndBreak(blocksBroken, player, EquipmentSlot.MAINHAND);
+                player.causeFoodExhaustion(0.005f * blocksBroken);
             }
         } finally {
             isBreakingArea = false;
-        }
-    }
-
-    private static void breakVerticalWall(Level level, BlockPos center, Player player, ItemStack stack, TagKey<Block> incorrectTag, int radius) {
-        float yaw = ((player.getYRot() % 360) + 360) % 360;
-        boolean widthAlongX;
-
-        if (yaw >= 45 && yaw < 135) {
-            widthAlongX = false;
-        } else if (yaw >= 135 && yaw < 225) {
-            widthAlongX = true;
-        } else if (yaw >= 225 && yaw < 315) {
-            widthAlongX = false;
-        } else {
-            widthAlongX = true;
-        }
-
-        boolean isCreative = player.getAbilities().instabuild;
-        int blocksBroken = 0;
-
-        for (int dVert = -radius; dVert <= radius; dVert++) {
-            for (int dHoriz = -radius; dHoriz <= radius; dHoriz++) {
-                if (dVert == 0 && dHoriz == 0) continue;
-                if (stack.isEmpty()) return;
-
-                BlockPos target = widthAlongX
-                        ? center.offset(dHoriz, dVert, 0)
-                        : center.offset(0, dVert, dHoriz);
-
-                if (tryBreakAt(level, target, player, stack, incorrectTag, isCreative)) {
-                    blocksBroken++;
-                }
-            }
-        }
-
-        // ── Износ: 1 прочность × количество сломанных блоков ──
-        if (blocksBroken > 0) {
-            stack.hurtAndBreak(blocksBroken, player, EquipmentSlot.MAINHAND);
-        }
-    }
-
-    private static void breakHorizontalFloor(Level level, BlockPos center, Player player, ItemStack stack, TagKey<Block> incorrectTag, int radius) {
-        boolean isCreative = player.getAbilities().instabuild;
-        int blocksBroken = 0;
-
-        for (int dx = -radius; dx <= radius; dx++) {
-            for (int dz = -radius; dz <= radius; dz++) {
-                if (dx == 0 && dz == 0) continue;
-                if (stack.isEmpty()) return;
-
-                BlockPos target = center.offset(dx, 0, dz);
-                if (tryBreakAt(level, target, player, stack, incorrectTag, isCreative)) {
-                    blocksBroken++;
-                }
-            }
-        }
-
-        // ── Износ: 1 прочность × количество сломанных блоков ──
-        if (blocksBroken > 0) {
-            stack.hurtAndBreak(blocksBroken, player, EquipmentSlot.MAINHAND);
         }
     }
 
@@ -189,9 +155,23 @@ public final class AugerMiningHandler {
         }
 
         // ── Считаем блок в прогресс апгрейда ──
-        AugerProgress prog = stack.getOrDefault(ModComponents.AUGER_PROGRESS, AugerProgress.INITIAL);
-        stack.set(ModComponents.AUGER_PROGRESS, prog.withMinedBlocks(prog.minedBlocks() + 1));
+        addProgress(stack, player, 1);
 
         return true;
+    }
+
+    /**
+     * Единая точка начисления прогресса. При пересечении порога
+     * апгрейда — однократный звуковой сигнал (без текста на экране).
+     */
+    private static void addProgress(ItemStack stack, Player player, int amount) {
+        AugerProgress before = stack.getOrDefault(ModComponents.AUGER_PROGRESS, AugerProgress.INITIAL);
+        AugerProgress after = before.withMinedBlocks(before.minedBlocks() + amount);
+        stack.set(ModComponents.AUGER_PROGRESS, after);
+
+        if (!before.canUpgrade() && after.canUpgrade()) {
+            player.level().playSound(null, player.blockPosition(),
+                    SoundEvents.EXPERIENCE_ORB_PICKUP, SoundSource.PLAYERS, 0.7f, 0.6f);
+        }
     }
 }

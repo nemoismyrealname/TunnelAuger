@@ -3,14 +3,11 @@
 	"id": "tunnel-auger",
 	"version": "${version}",
 	"name": "Tunnel Auger",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"description": "An upgradeable tunnel-boring pickaxe: mine blocks to level it up through rituals on the Builders' Philosopher Stone and unlock 3x3, 5x5 and 7x7 area mining.",
 	"authors": [
-		"Me!"
+		"tevos"
 	],
-	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
-	},
+	"contact": {},
 	"license": "CC0-1.0",
 	"icon": "assets/tunnel-auger/icon.png",
 	"environment": "*",

@@ -1,10 +1,12 @@
 {
   "item.tunnel_auger.tunnel_auger": "Tunnel Auger",
-  "item.tunnel_auger.tunnel_auger.line_level": " §8┃ §7Tier §e%d",
-  "item.tunnel_auger.tunnel_auger.line_area": " §8│ §b%d×%d",
-  "item.tunnel_auger.tunnel_auger.line_progress": " §8┃ §7§o%d§8/§7§o%d",
-  "item.tunnel_auger.tunnel_auger.line_ready": " §a▸ Ready!",
-  "item.tunnel_auger.tunnel_auger.line_progress_max": " §8┃ §7Total: §e%d §7blocks mined",
+  "item.tunnel_auger.tunnel_auger.line_level": "§7Tier §e%d",
+  "item.tunnel_auger.tunnel_auger.line_hint": "§8Hold [Shift] for details",
+  "item.tunnel_auger.tunnel_auger.line_area": "§b%d×%d",
+  "item.tunnel_auger.tunnel_auger.line_progress": "§7§o%d§8/§7§o%d",
+  "item.tunnel_auger.tunnel_auger.line_ready": "§a▸ Ready!",
+  "item.tunnel_auger.tunnel_auger.line_ritual": "§7Ritual: §b%s §7+ §e%d× %s",
+  "item.tunnel_auger.tunnel_auger.line_progress_max": "§7Total: §e%d §7blocks mined",
   "block.tunnel_auger.builders_philosopher_stone": "Builders' Philosopher Stone",
   "itemGroup.tunnel_auger": "Tunnel Auger"
 }

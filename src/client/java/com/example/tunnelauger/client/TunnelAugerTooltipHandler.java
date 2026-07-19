@@ -3,6 +3,7 @@ package com.example.tunnelauger.client;
 import java.util.List;
 
 import com.example.tunnelauger.item.AugerProgress;
+import com.example.tunnelauger.item.AugerUpgrades;
 import com.example.tunnelauger.item.ModComponents;
 import com.example.tunnelauger.item.TunnelAugerItem;
 
@@ -10,6 +11,7 @@ import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 
 import org.lwjgl.glfw.GLFW;
 
@@ -20,8 +22,8 @@ import org.lwjgl.glfw.GLFW;
  * ("When in hand…", компоненты и т.д.) — снизу.
  *
  * <p>В обычном состоянии (без Shift) показывается только уровень — строка
- * {@code line_level}. При зажатом Shift добавляются область копки и прогресс
- * апгрейда.</p>
+ * {@code line_level}. При зажатом Shift добавляются область копки, прогресс
+ * апгрейда, а при готовности — список материалов для ритуала.</p>
  *
  * <p>Регистрируется в {@link TunnelAugerClient#onInitializeClient()}.</p>
  */
@@ -43,15 +45,20 @@ public final class TunnelAugerTooltipHandler {
 
         int augerLevel = progress.level();
         int mined = progress.minedBlocks();
-        int need = AugerProgress.MINED_BLOCKS_FOR_UPGRADE;
+        int need = AugerProgress.blocksForUpgrade(augerLevel);
 
         // ── Уровень (всегда, без Shift тоже) ───────
         // Вставляем после имени предмета (индекс 0 → вставляем на 1)
         lines.add(1, Component.translatable(
                 "item.tunnel_auger.tunnel_auger.line_level", augerLevel));
 
-        // ── Shift-блок: расширенная информация ───────
-        if (!isShiftDown()) return;
+        // ── Shift-блок: расширенная информация;
+        //    без Shift — только подсказка, что подробности есть ───────
+        if (!isShiftDown()) {
+            lines.add(2, Component.translatable(
+                    "item.tunnel_auger.tunnel_auger.line_hint"));
+            return;
+        }
 
         int insertIdx = 2; // после line_level
 
@@ -70,6 +77,16 @@ public final class TunnelAugerTooltipHandler {
             if (mined >= need) {
                 lines.add(insertIdx++, Component.translatable(
                         "item.tunnel_auger.tunnel_auger.line_ready"));
+
+                // Материалы для ритуала апгрейда: ♥ + N× материал
+                AugerUpgrades.Cost cost = AugerUpgrades.costForLevel(augerLevel + 1);
+                if (cost != null) {
+                    lines.add(insertIdx++, Component.translatable(
+                            "item.tunnel_auger.tunnel_auger.line_ritual",
+                            Component.translatable(Items.HEART_OF_THE_SEA.getDescriptionId()),
+                            cost.count(),
+                            Component.translatable(cost.material().getDescriptionId())));
+                }
             }
         } else {
             lines.add(insertIdx++, Component.translatable(

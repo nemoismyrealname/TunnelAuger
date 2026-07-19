@@ -1,0 +1,11 @@
+{
+  "ingredients": {
+    "minecraft:iron_pickaxe": 1,
+    "minecraft:iron_ingot": 4,
+    "minecraft:diamond": 1
+  },
+  "result": {
+    "item": "tunnel_auger:tunnel_auger",
+    "count": 1
+  }
+}

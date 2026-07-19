@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Set;
 
 import com.example.tunnelauger.item.AugerProgress;
+import com.example.tunnelauger.item.AugerUpgrades;
 import com.example.tunnelauger.item.ModComponents;
 import com.example.tunnelauger.item.ModItems;
 
@@ -18,7 +19,6 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -30,14 +30,17 @@ import net.minecraft.world.phys.AABB;
  * <p><b>Сервер (каждые 10 тиков):</b>
  * <ol>
  *   <li>Сканирует предметы прямо над камнем.</li>
- *   <li>Проверяет рецепты крафта ({@link RitualRecipes}).</li>
- *   <li>Если нет — проверяет апгрейд бура.</li>
- *   <li>При несовпадении — визуальный отклик (частицы + звук).</li>
+ *   <li>Проверяет рецепты крафта ({@link RitualRecipes} — грузятся из JSON).</li>
+ *   <li>Если нет — проверяет апгрейд бура (стоимость — в {@link AugerUpgrades}).</li>
+ *   <li>Негативный отклик (частицы + звук) — <b>однократно</b>, только в момент,
+ *       когда на камень попадает предмет, не участвующий ни в одном рецепте
+ *       и ни в одном ритуале апгрейда (см. {@link #signalWrongItems}).</li>
  * </ol>
  *
  * <p><b>Клиент (каждый тик):</b> фоновые искорки зачарования.
  *
- * <p>Частицы вынесены в {@link BuildersStoneParticles}.
+ * <p>Предметы к камню <b>не притягиваются</b> — ванильное поведение дропа.
+ * Частицы вынесены в {@link BuildersStoneParticles}.
  */
 public class BuildersStoneBlockEntity extends BlockEntity {
 
@@ -47,13 +50,20 @@ public class BuildersStoneBlockEntity extends BlockEntity {
     private int ticksSinceCheck = 0;
     private int cooldownTicks = 0;
 
+    /**
+     * Типы «неправильных» предметов, на которые отклик уже был дан.
+     * Когда предмет убирают с камня — тип забывается, и повторный дроп
+     * снова даст однократный отклик.
+     */
+    private final Set<Item> signaledWrongItems = new HashSet<>();
+
     public BuildersStoneBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.BUILDERS_STONE_ENTITY, pos, state);
     }
 
-    // ═══════════════════════════════════════════════
+    // ═══════════════════════════════════════════
     //  Главный тик
-    // ═══════════════════════════════════════════════
+    // ═══════════════════════════════════════════
 
     public static void tick(Level level, BlockPos pos, BlockState state, BuildersStoneBlockEntity entity) {
         if (level.isClientSide()) {
@@ -72,7 +82,10 @@ public class BuildersStoneBlockEntity extends BlockEntity {
         entity.ticksSinceCheck = 0;
 
         List<ItemEntity> items = scanItems(level, pos);
-        if (items.isEmpty()) return;
+        if (items.isEmpty()) {
+            entity.signaledWrongItems.clear();
+            return;
+        }
 
         // 1. Обычные рецепты
         if (tryAnyRecipe(level, pos, items)) {
@@ -86,28 +99,33 @@ public class BuildersStoneBlockEntity extends BlockEntity {
             return;
         }
 
-        // 3. Валидация — шипим, если предметы явно не подходят
-        if (!isUpgradePending(items) && (!isPossibleSubsetOfAnyRecipe(items) || hasExcessiveQuantities(items))) {
-            BuildersStoneParticles.spawnFailure(level, pos);
-            level.playSound(null, pos, SoundEvents.FIRECHARGE_USE, SoundSource.BLOCKS, 0.3f, 0.8f);
-        }
+        // 3. Однократный негативный отклик на чужеродные предметы
+        entity.signalWrongItems(level, pos, items);
     }
 
-    // ═══════════════════════════════════════════════
+    // ═══════════════════════════════════════════
     //  Сканирование предметов
-    // ═══════════════════════════════════════════════
+    // ═══════════════════════════════════════════
 
+    /**
+     * Зона ритуала — вся верхняя грань камня с запасом по краям.
+     * Без магнита предметы лежат там, куда упали, поэтому зона покрывает
+     * весь верх блока (включая предметы, свесившиеся за кромку),
+     * но не землю рядом с камнем.
+     */
     private static List<ItemEntity> scanItems(Level level, BlockPos pos) {
-        AABB scanArea = new AABB(pos).move(0, 1, 0).inflate(0.15);
+        AABB scanArea = new AABB(
+                pos.getX() - 0.5, pos.getY() + 0.5, pos.getZ() - 0.5,
+                pos.getX() + 1.5, pos.getY() + 2.0, pos.getZ() + 1.5);
         return level.getEntitiesOfClass(ItemEntity.class, scanArea);
     }
 
-    // ═══════════════════════════════════════════════
+    // ═══════════════════════════════════════════
     //  Рецепты
-    // ═══════════════════════════════════════════════
+    // ═══════════════════════════════════════════
 
     private static boolean tryAnyRecipe(Level level, BlockPos pos, List<ItemEntity> items) {
-        for (RitualRecipe recipe : RitualRecipes.ALL) {
+        for (RitualRecipe recipe : RitualRecipes.all()) {
             if (!canConsume(items, recipe)) continue;
 
             consume(items, recipe);
@@ -165,12 +183,18 @@ public class BuildersStoneBlockEntity extends BlockEntity {
         level.addFreshEntity(resultEntity);
     }
 
-    // ═══════════════════════════════════════════════
+    // ═══════════════════════════════════════════
     //  Апгрейд бура
-    // ═══════════════════════════════════════════════
+    // ═══════════════════════════════════════════
 
     /**
-     * Уровни: 0→1 (♥ + 8 золота), 1→2 (♥ + 8 алмазов), 2→3 (♥ + 8 алм. блоков).
+     * Уровни: 0→1 (♥ + 8 золота), 1→2 (♥ + 8 алмазов),
+     * 2→3 (♥ + 8 незеритовых слитков).
+     * Стоимость живёт в {@link AugerUpgrades#costForLevel}.
+     *
+     * <p>Если бур ещё не накопал нужное число блоков или материалов
+     * не хватает — просто ничего не происходит (без шипения: все
+     * участники ритуала — «правильные» предметы).</p>
      *
      * @return true, если апгрейд выполнен
      */
@@ -181,26 +205,19 @@ public class BuildersStoneBlockEntity extends BlockEntity {
         if (target == null) return false;
 
         AugerProgress progress = target.progress();
-
-        if (!progress.canUpgrade()) {
-            BuildersStoneParticles.spawnFailure(level, pos);
-            level.playSound(null, pos, SoundEvents.FIRECHARGE_USE, SoundSource.BLOCKS, 0.3f, 0.8f);
-            return true;
-        }
+        if (!progress.canUpgrade()) return false;
 
         int nextLevel = progress.level() + 1;
-        UpgradeMaterial material = UpgradeMaterial.forLevel(nextLevel);
-        if (material == null) return false;
+        AugerUpgrades.Cost cost = AugerUpgrades.costForLevel(nextLevel);
+        if (cost == null) return false;
 
-        if (!hasUpgradeMaterials(entities, material)) return false;
+        if (!hasUpgradeMaterials(entities, cost)) return false;
 
-        consumeUpgradeMaterials(entities, material);
+        consumeUpgradeMaterials(entities, cost);
 
         // ── Применяем апгрейд (через setItem чтобы обновить визуал) ──
         ItemStack augerStack = target.entity().getItem().copy();
-        augerStack.set(ModComponents.AUGER_PROGRESS, progress.nextLevel());
-        augerStack.set(ModComponents.AUGER_LEVEL, nextLevel);
-        augerStack.set(DataComponents.RARITY, AugerProgress.rarityForLevel(nextLevel));
+        AugerUpgrades.applyLevel(augerStack, progress.nextLevel());
         target.entity().setItem(augerStack);
 
         BuildersStoneParticles.spawnUpgrade(level, pos);
@@ -210,17 +227,6 @@ public class BuildersStoneBlockEntity extends BlockEntity {
     }
 
     private record AugerTarget(ItemEntity entity, AugerProgress progress) {
-    }
-
-    private record UpgradeMaterial(Item item, int count) {
-        static UpgradeMaterial forLevel(int level) {
-            return switch (level) {
-                case 1 -> new UpgradeMaterial(Items.GOLD_INGOT, 8);
-                case 2 -> new UpgradeMaterial(Items.DIAMOND, 8);
-                case 3 -> new UpgradeMaterial(Items.DIAMOND_BLOCK, 8);
-                default -> null;
-            };
-        }
     }
 
     private static AugerTarget findAugerTarget(List<ItemEntity> entities) {
@@ -236,7 +242,7 @@ public class BuildersStoneBlockEntity extends BlockEntity {
         return null;
     }
 
-    private static boolean hasUpgradeMaterials(List<ItemEntity> entities, UpgradeMaterial material) {
+    private static boolean hasUpgradeMaterials(List<ItemEntity> entities, AugerUpgrades.Cost cost) {
         int hearts = 0;
         int mats = 0;
         for (ItemEntity e : entities) {
@@ -244,16 +250,16 @@ public class BuildersStoneBlockEntity extends BlockEntity {
             ItemStack stack = e.getItem();
             if (stack.is(Items.HEART_OF_THE_SEA)) {
                 hearts += stack.getCount();
-            } else if (stack.is(material.item())) {
+            } else if (stack.is(cost.material())) {
                 mats += stack.getCount();
             }
         }
-        return hearts >= 1 && mats >= material.count();
+        return hearts >= AugerUpgrades.HEARTS_REQUIRED && mats >= cost.count();
     }
 
-    private static void consumeUpgradeMaterials(List<ItemEntity> entities, UpgradeMaterial material) {
-        int heartNeeded = 1;
-        int matNeeded = material.count();
+    private static void consumeUpgradeMaterials(List<ItemEntity> entities, AugerUpgrades.Cost cost) {
+        int heartNeeded = AugerUpgrades.HEARTS_REQUIRED;
+        int matNeeded = cost.count();
 
         for (ItemEntity e : entities) {
             if (!e.isAlive() || e.getItem().isEmpty()) continue;
@@ -266,7 +272,7 @@ public class BuildersStoneBlockEntity extends BlockEntity {
                 stack.shrink(take);
                 heartNeeded -= take;
                 if (stack.isEmpty()) e.discard();
-            } else if (stack.is(material.item()) && matNeeded > 0) {
+            } else if (stack.is(cost.material()) && matNeeded > 0) {
                 int take = Math.min(matNeeded, stack.getCount());
                 stack.shrink(take);
                 matNeeded -= take;
@@ -275,67 +281,74 @@ public class BuildersStoneBlockEntity extends BlockEntity {
         }
     }
 
-    // ═══════════════════════════════════════════════
-    //  Валидация предметов на алтаре
-    // ═══════════════════════════════════════════════
+    // ═══════════════════════════════════════════
+    //  Однократный негативный отклик
+    // ═══════════════════════════════════════════
 
-    private static boolean isUpgradePending(List<ItemEntity> entities) {
-        return findAugerTarget(entities) != null;
+    /**
+     * Шипит частицами + звуком <b>один раз</b> — только когда на камне
+     * появляется новый тип предмета, не участвующий ни в одном рецепте
+     * и ни в одном ритуале. Пока предмет лежит — камень молчит;
+     * убрали и бросили снова — отклик повторится.
+     */
+    private void signalWrongItems(Level level, BlockPos pos, List<ItemEntity> items) {
+        Set<Item> present = new HashSet<>();
+        for (ItemEntity e : items) {
+            if (!e.isAlive() || e.getItem().isEmpty()) continue;
+            present.add(e.getItem().getItem());
+        }
+
+        // Забываем типы, которых на камне больше нет.
+        signaledWrongItems.retainAll(present);
+
+        boolean newWrongItem = false;
+        for (Item item : present) {
+            if (isKnownRitualItem(item)) continue;
+            if (signaledWrongItems.add(item)) {
+                newWrongItem = true;
+            }
+        }
+
+        if (newWrongItem) {
+            BuildersStoneParticles.spawnFailure(level, pos);
+            level.playSound(null, pos, SoundEvents.FIRECHARGE_USE, SoundSource.BLOCKS, 0.3f, 0.8f);
+        }
     }
 
-    /** Все ли типы предметов входят в состав хотя бы одного рецепта. */
-    private static boolean isPossibleSubsetOfAnyRecipe(List<ItemEntity> entities) {
-        Set<Item> presentTypes = new HashSet<>();
-        for (ItemEntity e : entities) {
-            if (!e.isAlive() || e.getItem().isEmpty()) continue;
-            presentTypes.add(e.getItem().getItem());
-        }
-        if (presentTypes.isEmpty()) return true;
+    /**
+     * «Правильный» предмет — участник хотя бы одного рецепта (ингредиент
+     * или результат) либо ритуала апгрейда (бур, сердце моря, материалы).
+     */
+    private static boolean isKnownRitualItem(Item item) {
+        if (item == ModItems.TUNNEL_AUGER) return true;
+        if (item == Items.HEART_OF_THE_SEA) return true;
 
-        for (RitualRecipe recipe : RitualRecipes.ALL) {
-            if (recipe.ingredients().keySet().containsAll(presentTypes)) {
-                return true;
-            }
+        for (int lvl = 1; lvl <= AugerProgress.MAX_LEVEL; lvl++) {
+            AugerUpgrades.Cost cost = AugerUpgrades.costForLevel(lvl);
+            if (cost != null && cost.material() == item) return true;
+        }
+
+        for (RitualRecipe recipe : RitualRecipes.all()) {
+            if (recipe.ingredients().containsKey(item)) return true;
+            if (recipe.result().getItem() == item) return true;
         }
         return false;
     }
 
-    /** Превышает ли количество предметов максимум по любому рецепту. */
-    private static boolean hasExcessiveQuantities(List<ItemEntity> entities) {
-        Map<Item, Integer> maxNeeded = new HashMap<>();
-        for (RitualRecipe recipe : RitualRecipes.ALL) {
-            for (Map.Entry<Item, Integer> entry : recipe.ingredients().entrySet()) {
-                maxNeeded.merge(entry.getKey(), entry.getValue(), Integer::max);
-            }
-        }
-
-        Map<Item, Integer> totalByType = new HashMap<>();
-        for (ItemEntity e : entities) {
-            if (!e.isAlive() || e.getItem().isEmpty()) continue;
-            totalByType.merge(e.getItem().getItem(), e.getItem().getCount(), Integer::sum);
-        }
-
-        for (Map.Entry<Item, Integer> entry : totalByType.entrySet()) {
-            if (entry.getValue() > maxNeeded.getOrDefault(entry.getKey(), 0)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // ═══════════════════════════════════════════════
+    // ═══════════════════════════════════════════
     //  Клиентские частицы
-    // ═══════════════════════════════════════════════
+    // ═══════════════════════════════════════════
 
     private void clientParticles(Level level, BlockPos pos) {
         if (level.getRandom().nextInt(20) != 0) return;
 
-        AABB scanArea = new AABB(pos).move(0, 1, 0).inflate(0.15);
-        boolean hasItems = !level.getEntitiesOfClass(ItemEntity.class, scanArea).isEmpty();
+        boolean hasItems = !scanItems(level, pos).isEmpty();
 
+        // Базовая искорка + вторая с шансом 50%, когда на камне лежат предметы
+        // (камень «оживает» активнее).
+        BuildersStoneParticles.spawnAmbient(level, pos);
         if (hasItems && level.getRandom().nextBoolean()) {
             BuildersStoneParticles.spawnAmbient(level, pos);
         }
-        BuildersStoneParticles.spawnAmbient(level, pos);
     }
 }

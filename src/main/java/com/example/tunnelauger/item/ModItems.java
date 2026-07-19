@@ -13,7 +13,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.Rarity;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ToolMaterial;
 
 import net.minecraft.core.component.DataComponents;
@@ -23,14 +23,14 @@ import net.minecraft.world.level.block.Block;
  * Все предметы мода регистрируются здесь, в одном месте — так проще
  * поддерживать список при переходе на новые версии игры.
  *
- * TUNNEL_AUGER — кастомная кирка (TunnelAugerItem):
- * <ul>
- *   <li>Уровень 0 — железный уровень (6.0 скорость, 500 прочность)</li>
- *   <li>Уровень 1 — алмазный уровень (8.0 скорость, 1561 прочность, копка 3×3)</li>
- * </ul>
+ * TUNNEL_AUGER — кастомная кирка (TunnelAugerItem) с четырьмя тирами.
+ * Базовая регистрация — на железном уровне (Tier 0). Пороги апгрейда
+ * и прочность по тирам живут в {@link AugerProgress}, стоимость ритуала
+ * и применение уровня — в {@link AugerUpgrades}.
  *
- * В креативе выдаётся бур уровня 0 — игроку нужно накопать 200 блоков
- * и провести ритуал на Философском камне, чтобы улучшить до уровня 1.
+ * В креативной вкладке лежат все четыре тира (как ванильные
+ * зачарованные книги разных уровней) — удобно для тестов и креатива.
+ * В выживании путь один: копать и проводить ритуалы на Философском камне.
  */
 public final class ModItems {
 
@@ -40,30 +40,31 @@ public final class ModItems {
             Identifier.fromNamespaceAndPath(TunnelAugerMod.MOD_ID, "incorrect_for_tunnel_auger")
     );
 
-    /** Чем можно чинить бур на наковальне. */
+    /** Чем можно чинить бур на наковальне (базовый тег для Tier 0;
+     *  на старших тирах переопределяется компонентом REPAIRABLE,
+     *  см. {@link AugerUpgrades#applyLevel}). */
     public static final TagKey<Item> REPAIRS_TUNNEL_AUGER = TagKey.create(
             BuiltInRegistries.ITEM.key(),
             Identifier.fromNamespaceAndPath(TunnelAugerMod.MOD_ID, "repairs_tunnel_auger")
     );
 
-    // ── Материал бура ────────────────────────────
+    // ── Материал бура ────────────────────────
     //
     // Базовая регистрация — на железном уровне (500 прочность, 6.0 скорость).
     // Все level-зависимые штуки (скорость, правильный инструмент для дропа,
-    // корректный тег неправильных блоков) переопределены в TunnelAugerItem
-    // и смотрят на AugerProgress.level. Алмазные характеристики для level=1
-    // задаются там же, в коде предмета.
+    // корректный тег неправильных блоков) переопределены в TunnelAugerItem,
+    // прочность и ремонт по тирам — через компоненты в AugerUpgrades.applyLevel().
 
     public static final ToolMaterial TUNNEL_AUGER_MATERIAL = new ToolMaterial(
             INCORRECT_FOR_TUNNEL_AUGER,
-            500,    // прочность
+            500,    // прочность (Tier 0; выше — через MAX_DAMAGE-компонент)
             6.0F,   // скорость копки
             1.0F,   // бонус к урону
             14,     // зачаровываемость
             REPAIRS_TUNNEL_AUGER
     );
 
-    // ── Предмет ─────────────────────────────────────────
+    // ── Предмет ─────────────────────────────────
 
     public static final Item TUNNEL_AUGER = register(
             "tunnel_auger",
@@ -83,7 +84,20 @@ public final class ModItems {
     /** Вызывается один раз из TunnelAugerMod.onInitialize(). */
     public static void register() {
         CreativeModeTabEvents.modifyOutputEvent(CreativeModeTabs.TOOLS_AND_UTILITIES)
-                .register(entries -> entries.accept(TUNNEL_AUGER));
+                .register(entries -> {
+                    entries.accept(TUNNEL_AUGER);
+                    // Старшие тиры — для креатива и быстрого теста без гринда
+                    for (int level = 1; level <= AugerProgress.MAX_LEVEL; level++) {
+                        entries.accept(augerAtLevel(level));
+                    }
+                });
+    }
+
+    /** Готовый стак бура указанного тира (креативная вкладка, тесты). */
+    public static ItemStack augerAtLevel(int level) {
+        ItemStack stack = new ItemStack(TUNNEL_AUGER);
+        AugerUpgrades.applyLevel(stack, new AugerProgress(level, 0));
+        return stack;
     }
 
     private static Item register(String name, Function<Item.Properties, Item> factory) {

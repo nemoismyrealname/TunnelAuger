@@ -42,7 +42,15 @@ public class TunnelAugerItem extends Item {
             Identifier.fromNamespaceAndPath("minecraft", "mineable/pickaxe")
     );
 
-    private static final float[] LEVEL_SPEEDS = {6.0F, 8.0F, 9.0F, 10.0F};
+    // ── Скорость копки по уровням ────────────────────────────────
+    // Tier 0 = железо (6.0), Tier 1 = алмаз (8.0), Tier 2 = незерит (9.0),
+    // Tier 3 = сверх-незерит (10.0). Ориентиры — ванильные ToolMaterial.
+    private static final float SPEED_TIER_0 = 6.0F;
+    private static final float SPEED_TIER_1 = 8.0F;
+    private static final float SPEED_TIER_2 = 9.0F;
+    private static final float SPEED_TIER_3 = 10.0F;
+
+    private static final float[] LEVEL_SPEEDS = {SPEED_TIER_0, SPEED_TIER_1, SPEED_TIER_2, SPEED_TIER_3};
 
     public TunnelAugerItem(ToolMaterial material, float attackDamage, float attackSpeed, Properties properties) {
         super(properties.pickaxe(material, attackDamage, attackSpeed));
@@ -87,10 +95,18 @@ public class TunnelAugerItem extends Item {
         return Component.translatable(this.getDescriptionId()).withStyle(rarity.color());
     }
 
-    /**
-     * Базовая зачаровываемость — 0 (Item не имеет этого метода в 26.2).
-     * Per-stack зачаровываемость управляется миксином
-     * {@code TunnelAugerEnchantmentMixin}, который перехватывает
-     * {@code ItemStack.getEnchantmentValue()}.
+    /*
+     * Зачарования.
+     *
+     * До Tier 3 зачарование заблокировано двумя миксинами:
+     *  - TunnelAugerEnchantmentMixin — Enchantment.canEnchant(...)  → стол зачарования;
+     *  - TunnelAugerCanStoreMixin    — EnchantmentHelper.canStoreEnchantments(...) → наковальня/книги.
+     *
+     * Efficiency: в современных версиях бонус применяется на уровне ИГРОКА
+     * (модификатор скорости копки от зачарования), а не через
+     * Item.getDestroySpeed — поэтому на Tier 3 он должен работать поверх
+     * LEVEL_SPEEDS без дополнительного кода. Если проверка в runClient
+     * покажет обратное — добавить учёт уровня Efficiency прямо в
+     * getDestroySpeed().
      */
 }

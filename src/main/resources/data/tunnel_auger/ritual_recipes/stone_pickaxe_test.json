@@ -1,0 +1,10 @@
+{
+  "__comment": "Тестовый рецепт для проверки механики — удалить перед релизом или переопределить датапаком",
+  "ingredients": {
+    "minecraft:cobblestone": 3
+  },
+  "result": {
+    "item": "minecraft:stone_pickaxe",
+    "count": 1
+  }
+}
