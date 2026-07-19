@@ -39,6 +39,7 @@ public class BuildersStoneBlock extends BaseEntityBlock {
     @Nullable
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
+        
         return createTickerHelper(type, ModBlockEntities.BUILDERS_STONE_ENTITY, BuildersStoneBlockEntity::tick);
     }
 }
