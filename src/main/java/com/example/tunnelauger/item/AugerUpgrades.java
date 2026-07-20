@@ -1,5 +1,7 @@
 package com.example.tunnelauger.item;
 
+import java.util.List;
+
 import net.minecraft.core.HolderSet;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.Item;
@@ -10,7 +12,7 @@ import net.minecraft.world.item.enchantment.Repairable;
 /**
  * Всё, что связано с апгрейдом бура, в одном месте:
  * <ul>
- *   <li>стоимость ритуала для каждого уровня ({@link #costForLevel});</li>
+ *   <li>варианты стоимости ритуала для каждого уровня ({@link #costsForLevel});</li>
  *   <li>ремонт-материал по тирам ({@link #repairItemForLevel});</li>
  *   <li>применение уровня к стаку ({@link #applyLevel}) — единая точка,
  *       которую используют и Философский камень, и креативная вкладка.</li>
@@ -29,18 +31,23 @@ public final class AugerUpgrades {
     }
 
     /**
-     * Стоимость ритуала для перехода НА указанный уровень
-     * (плюс {@link #HEARTS_REQUIRED} сердце моря).
-     * Уровни: 0→1 (8 золота), 1→2 (8 алмазов), 2→3 (8 незеритовых слитков).
+     * Варианты материальной стоимости ритуала для перехода НА указанный
+     * уровень (плюс {@link #HEARTS_REQUIRED} сердце моря). Для апгрейда
+     * достаточно ЛЮБОГО одного варианта целиком; смешивать варианты нельзя.
+     * <ul>
+     *   <li>0→1: 18 алмазов ИЛИ 2 алмазных блока;</li>
+     *   <li>1→2: 8 незеритовых обломков ИЛИ 2 незеритовых слитка;</li>
+     *   <li>2→3: 8 незеритовых слитков.</li>
+     * </ul>
      *
-     * @return null, если такого перехода нет
+     * @return пустой список, если такого перехода нет
      */
-    public static Cost costForLevel(int nextLevel) {
+    public static List<Cost> costsForLevel(int nextLevel) {
         return switch (nextLevel) {
-            case 1 -> new Cost(Items.GOLD_INGOT, 8);
-            case 2 -> new Cost(Items.DIAMOND, 8);
-            case 3 -> new Cost(Items.NETHERITE_INGOT, 8);
-            default -> null;
+            case 1 -> List.of(new Cost(Items.DIAMOND, 18), new Cost(Items.DIAMOND_BLOCK, 2));
+            case 2 -> List.of(new Cost(Items.NETHERITE_SCRAP, 8), new Cost(Items.NETHERITE_INGOT, 2));
+            case 3 -> List.of(new Cost(Items.NETHERITE_INGOT, 8));
+            default -> List.of();
         };
     }
 

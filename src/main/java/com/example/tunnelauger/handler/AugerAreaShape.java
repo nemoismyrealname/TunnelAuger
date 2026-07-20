@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.phys.AABB;
 
 /**
@@ -31,6 +32,20 @@ public final class AugerAreaShape {
     private AugerAreaShape() {
     }
 
+    /**
+     * Ориентация по грани блока, в которую бьёт игрок:
+     * верхняя/нижняя грань — горизонтальная площадка,
+     * боковая — вертикальная стенка в плоскости этой грани.
+     */
+    public static Orientation orientationFor(Direction face) {
+        return switch (face.getAxis()) {
+            case Y -> Orientation.FLOOR;
+            case X -> Orientation.WALL_Z; // грань запад/восток → стенка в плоскости Z/Y
+            case Z -> Orientation.WALL_X; // грань север/юг → стенка в плоскости X/Y
+        };
+    }
+
+    /** Фолбэк по углам взгляда — когда грань блока определить не удалось. */
     public static Orientation orientationFor(float yawDeg, float pitchDeg) {
         if (Math.abs(pitchDeg) >= PITCH_THRESHOLD) return Orientation.FLOOR;
 

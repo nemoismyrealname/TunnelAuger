@@ -53,7 +53,11 @@ public record AugerProgress(int level, int minedBlocks) {
         return DURABILITY[Math.clamp(level, 0, DURABILITY.length - 1)];
     }
 
-    /** Размер области копки по уровню: level → (radius, area) */
+    /**
+     * Максимальная сторона квадрата области копки для уровня:
+     * 0 → 1×1, 1 → 3×3, 2 → 5×5, 3 → 7×7. Фактически выбранный режим может быть меньше
+     * (компонент AUGER_MODE, см. TunnelAugerItem#effectiveAreaSize).
+     */
     public static int areaSize(int level) {
         return switch (level) {
             case 1 -> 3;  // 3×3

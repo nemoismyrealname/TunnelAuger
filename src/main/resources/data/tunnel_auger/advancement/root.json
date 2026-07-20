@@ -1,0 +1,45 @@
+{
+  "criteria": {
+    "stone": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": "tunnel_auger:builders_philosopher_stone"
+          }
+        ]
+      }
+    },
+    "auger": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": "tunnel_auger:tunnel_auger"
+          }
+        ]
+      }
+    }
+  },
+  "requirements": [
+    [
+      "stone",
+      "auger"
+    ]
+  ],
+  "display": {
+    "icon": {
+      "id": "tunnel_auger:builders_philosopher_stone"
+    },
+    "title": {
+      "translate": "advancements.tunnel_auger.root.title"
+    },
+    "description": {
+      "translate": "advancements.tunnel_auger.root.description"
+    },
+    "background": "minecraft:gui/advancements/backgrounds/stone",
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "sends_telemetry_event": false
+}

@@ -6,6 +6,7 @@ import com.example.tunnelauger.item.TunnelAugerItem;
 
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
@@ -19,18 +20,21 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Fabric-событие, которое срабатывает после разрушения блока игроком.
  * <p>
  * Считает накопанные блоки в {@link AugerProgress},
  * а на уровне 1+ ломает блоки в области: 3×3, 5×5 или 7×7.
- * Геометрия области (ориентация по взгляду, список позиций) вынесена
+ * Геометрия области (ориентация по грани блока, список позиций) вынесена
  * в {@link AugerAreaShape} — её же использует клиентская обводка области.
  * <p>
  * QoL-правила:
  * <ul>
- *   <li><b>Shift</b> отключает площадную копку — точная работа одним блоком;</li>
+ *   <li><b>Shift+ПКМ</b> циклически переключает размер области:
+ *       1 → 3×3 → 5×5 → 7×7 (до максимума тира) —
+ *       точная копка одним блоком = режим 1×1;</li>
  *   <li>бур <b>никогда не ломается</b> от площадной копки: когда остаётся
  *       1 прочности — область перестаёт копаться (износ при этом
  *       честный: 1 прочность за каждый сломанный блок);</li>
@@ -78,11 +82,9 @@ public final class AugerMiningHandler {
             addProgress(stack, player, 1);
         }
 
-        // ── Shift = точная копка одним блоком, без области ──
-        if (player.isShiftKeyDown()) return;
-
         AugerProgress progress = stack.getOrDefault(ModComponents.AUGER_PROGRESS, AugerProgress.INITIAL);
-        int areaSize = AugerProgress.areaSize(progress.level());
+        // Размер области = выбранный режим (Shift+ПКМ), не выше максимума тира.
+        int areaSize = TunnelAugerItem.effectiveAreaSize(stack);
         if (areaSize > 1) {
             breakArea(level, pos, player, stack, progress, areaSize);
         }
@@ -97,35 +99,29 @@ public final class AugerMiningHandler {
         isBreakingArea = true;
 
         try {
-            TagKey<Block> incorrectTag = progress.level() >= 1
-                    ? INCORRECT_FOR_DIAMOND
-                    : INCORRECT_FOR_IRON;
-
             boolean isCreative = player.getAbilities().instabuild;
 
-            // ── Бюджет прочности: оставляем минимум 1, чтобы бур
-            //     никогда не ломался от площадной копки ──
-            int budget = isCreative
-                    ? Integer.MAX_VALUE
-                    : stack.getMaxDamage() - stack.getDamageValue() - 1;
-            if (budget <= 0) return;
-
-            AugerAreaShape.Orientation orientation =
-                    AugerAreaShape.orientationFor(player.getYRot(), player.getXRot());
+            AugerAreaShape.Orientation orientation = orientationFor(player, center);
             int radius = (size - 1) / 2; // 3→1, 5→2, 7→3
 
             int blocksBroken = 0;
             for (BlockPos target : AugerAreaShape.positions(center, orientation, radius)) {
-                if (blocksBroken >= budget) break;
-                if (tryBreakAt(level, target, player, stack, incorrectTag, isCreative)) {
+                // ── Бур никогда не ломается от площадной копки:
+                //     когда остаётся 1 прочности — останавливаемся ──
+                if (!isCreative && stack.getMaxDamage() - stack.getDamageValue() <= 1) break;
+
+                if (tryBreakAt(level, target, player, stack, progress.level(), isCreative)) {
                     blocksBroken++;
+                    // ── Износ за КАЖДЫЙ блок отдельно — Unbreaking бросает
+                    //     кубик на каждый блок независимо ──
+                    if (!isCreative) {
+                        stack.hurtAndBreak(1, player, EquipmentSlot.MAINHAND);
+                    }
                 }
             }
 
-            // ── Износ: 1 прочность × количество сломанных блоков,
-            //     плюс ванильное истощение голода (0.005 за блок, как в ванили) ──
+            // ── Ванильное истощение голода: 0.005 за блок (без случайности) ──
             if (blocksBroken > 0 && !isCreative) {
-                stack.hurtAndBreak(blocksBroken, player, EquipmentSlot.MAINHAND);
                 player.causeFoodExhaustion(0.005f * blocksBroken);
             }
         } finally {
@@ -133,13 +129,78 @@ public final class AugerMiningHandler {
         }
     }
 
-    private static boolean tryBreakAt(Level level, BlockPos pos, Player player, ItemStack stack, TagKey<Block> incorrectTag, boolean isCreative) {
-        BlockState state = level.getBlockState(pos);
+    /**
+     * Ориентация области по грани центрального блока, в которую бил игрок.
+     * <p>Событие Fabric грань не сообщает, а сам блок к этому моменту уже
+     * сломан (рейтрейс мира пролетит насквозь) — поэтому грань
+     * восстанавливается геометрически: через какую грань куба входит луч
+     * взгляда. Если луч мимо (лаг, рассинхрон) — фолбэк по углам взгляда.</p>
+     */
+    private static AugerAreaShape.Orientation orientationFor(Player player, BlockPos center) {
+        Direction face = lookEntryFace(player.getEyePosition(), player.getViewVector(1.0f), center);
+        if (face != null) return AugerAreaShape.orientationFor(face);
+        return AugerAreaShape.orientationFor(player.getYRot(), player.getXRot());
+    }
+
+    /** Грань куба {@code pos}, через которую входит луч; {@code null} — луч мимо куба. */
+    private static Direction lookEntryFace(Vec3 eye, Vec3 view, BlockPos pos) {
+        double tEnter = Double.NEGATIVE_INFINITY;
+        double tExit = Double.POSITIVE_INFINITY;
+        Direction face = null;
+
+        double[] mins = {pos.getX(), pos.getY(), pos.getZ()};
+        double[] eyes = {eye.x, eye.y, eye.z};
+        double[] dirs = {view.x, view.y, view.z};
+        Direction[][] entryFaces = {
+                {Direction.WEST, Direction.EAST},   // луч идёт по +X / по −X
+                {Direction.DOWN, Direction.UP},
+                {Direction.NORTH, Direction.SOUTH},
+        };
+
+        // Slab-метод: пересечение луча с единичным кубом по трём осям.
+        for (int axis = 0; axis < 3; axis++) {
+            if (Math.abs(dirs[axis]) < 1.0e-7) {
+                if (eyes[axis] < mins[axis] || eyes[axis] > mins[axis] + 1) return null;
+                continue;
+            }
+            double t1 = (mins[axis] - eyes[axis]) / dirs[axis];
+            double t2 = (mins[axis] + 1 - eyes[axis]) / dirs[axis];
+            Direction entry = dirs[axis] > 0 ? entryFaces[axis][0] : entryFaces[axis][1];
+            double tNear = Math.min(t1, t2);
+            double tFar = Math.max(t1, t2);
+            if (tNear > tEnter) {
+                tEnter = tNear;
+                face = entry;
+            }
+            tExit = Math.min(tExit, tFar);
+        }
+
+        if (face == null || tEnter > tExit || tEnter < 0) return null;
+        return face;
+    }
+
+    /**
+     * Может ли бур указанного тира выкопать блок площадной копкой:
+     * не воздух, не «неразрушимый» (бедрок), без block entity
+     * (печи, спавнеры, шалкеры — только прицельно), копается киркой
+     * и подходит по тиру инструмента.
+     * <p>Единая точка правды для серверной копки И клиентской обводки —
+     * обводка всегда показывает ровно те блоки, что будут сломаны.</p>
+     */
+    public static boolean isAreaMineable(Level level, BlockPos pos, BlockState state, int augerLevel) {
         if (state.isAir()) return false;
         if (state.getDestroySpeed(level, pos) < 0) return false;
-
+        // ── Функциональные блоки (печи, спавнеры, шалкеры, воронки…)
+        //     областью не ломаются — только прицельно, центральным блоком ──
+        if (state.hasBlockEntity()) return false;
         if (!state.is(MINEABLE_PICKAXE)) return false;
-        if (state.is(incorrectTag)) return false;
+        TagKey<Block> incorrectTag = augerLevel >= 1 ? INCORRECT_FOR_DIAMOND : INCORRECT_FOR_IRON;
+        return !state.is(incorrectTag);
+    }
+
+    private static boolean tryBreakAt(Level level, BlockPos pos, Player player, ItemStack stack, int augerLevel, boolean isCreative) {
+        BlockState state = level.getBlockState(pos);
+        if (!isAreaMineable(level, pos, state, augerLevel)) return false;
 
         if (!isCreative && level instanceof ServerLevel serverLevel) {
             // ── Используем стак игрока, чтобы зачарования (Fortune, Silk Touch)

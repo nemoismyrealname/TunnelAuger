@@ -1,0 +1,36 @@
+{
+  "parent": "tunnel_auger:tier1",
+  "criteria": {
+    "tier3": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": "tunnel_auger:tunnel_auger",
+            "components": {
+              "tunnel_auger:auger_level": 3
+            }
+          }
+        ]
+      }
+    }
+  },
+  "requirements": [
+    [
+      "tier3"
+    ]
+  ],
+  "display": {
+    "icon": {
+      "id": "minecraft:netherite_ingot"
+    },
+    "frame": "challenge",
+    "title": {
+      "translate": "advancements.tunnel_auger.tier3.title"
+    },
+    "description": {
+      "translate": "advancements.tunnel_auger.tier3.description"
+    }
+  },
+  "sends_telemetry_event": false
+}

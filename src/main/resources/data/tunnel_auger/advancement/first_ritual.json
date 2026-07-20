@@ -1,0 +1,32 @@
+{
+  "parent": "tunnel_auger:root",
+  "criteria": {
+    "auger": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": "tunnel_auger:tunnel_auger"
+          }
+        ]
+      }
+    }
+  },
+  "requirements": [
+    [
+      "auger"
+    ]
+  ],
+  "display": {
+    "icon": {
+      "id": "tunnel_auger:tunnel_auger"
+    },
+    "title": {
+      "translate": "advancements.tunnel_auger.first_ritual.title"
+    },
+    "description": {
+      "translate": "advancements.tunnel_auger.first_ritual.description"
+    }
+  },
+  "sends_telemetry_event": false
+}

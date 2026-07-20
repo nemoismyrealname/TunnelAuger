@@ -188,9 +188,11 @@ public class BuildersStoneBlockEntity extends BlockEntity {
     // ═══════════════════════════════════════════
 
     /**
-     * Уровни: 0→1 (♥ + 8 золота), 1→2 (♥ + 8 алмазов),
+     * Уровни: 0→1 (♥ + 18 алмазов или 2 алмазных блока),
+     * 1→2 (♥ + 8 незеритовых обломков или 2 слитка),
      * 2→3 (♥ + 8 незеритовых слитков).
-     * Стоимость живёт в {@link AugerUpgrades#costForLevel}.
+     * Варианты стоимости живут в {@link AugerUpgrades#costsForLevel};
+     * засчитывается любой ОДИН вариант целиком, смешивать нельзя.
      *
      * <p>Если бур ещё не накопал нужное число блоков или материалов
      * не хватает — просто ничего не происходит (без шипения: все
@@ -208,10 +210,14 @@ public class BuildersStoneBlockEntity extends BlockEntity {
         if (!progress.canUpgrade()) return false;
 
         int nextLevel = progress.level() + 1;
-        AugerUpgrades.Cost cost = AugerUpgrades.costForLevel(nextLevel);
+        AugerUpgrades.Cost cost = null;
+        for (AugerUpgrades.Cost option : AugerUpgrades.costsForLevel(nextLevel)) {
+            if (hasUpgradeMaterials(entities, option)) {
+                cost = option;
+                break;
+            }
+        }
         if (cost == null) return false;
-
-        if (!hasUpgradeMaterials(entities, cost)) return false;
 
         consumeUpgradeMaterials(entities, cost);
 
@@ -324,8 +330,9 @@ public class BuildersStoneBlockEntity extends BlockEntity {
         if (item == Items.HEART_OF_THE_SEA) return true;
 
         for (int lvl = 1; lvl <= AugerProgress.MAX_LEVEL; lvl++) {
-            AugerUpgrades.Cost cost = AugerUpgrades.costForLevel(lvl);
-            if (cost != null && cost.material() == item) return true;
+            for (AugerUpgrades.Cost cost : AugerUpgrades.costsForLevel(lvl)) {
+                if (cost.material() == item) return true;
+            }
         }
 
         for (RitualRecipe recipe : RitualRecipes.all()) {

@@ -10,6 +10,7 @@ import com.example.tunnelauger.item.TunnelAugerItem;
 import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
@@ -62,11 +63,13 @@ public final class TunnelAugerTooltipHandler {
 
         int insertIdx = 2; // после line_level
 
-        // Область копки (Tier 1+)
+        // Область копки (Tier 1+): текущий режим (Shift+ПКМ) + подсказка
         if (augerLevel >= 1) {
-            int area = AugerProgress.areaSize(augerLevel);
+            int area = TunnelAugerItem.effectiveAreaSize(stack);
             lines.add(insertIdx++, Component.translatable(
                     "item.tunnel_auger.tunnel_auger.line_area", area, area));
+            lines.add(insertIdx++, Component.translatable(
+                    "item.tunnel_auger.tunnel_auger.line_mode_hint"));
         }
 
         // Прогресс апгрейда
@@ -78,14 +81,25 @@ public final class TunnelAugerTooltipHandler {
                 lines.add(insertIdx++, Component.translatable(
                         "item.tunnel_auger.tunnel_auger.line_ready"));
 
-                // Материалы для ритуала апгрейда: ♥ + N× материал
-                AugerUpgrades.Cost cost = AugerUpgrades.costForLevel(augerLevel + 1);
-                if (cost != null) {
+                // Материалы для ритуала: ♥ + вариант(ы) «N× материал или M× материал»
+                List<AugerUpgrades.Cost> options = AugerUpgrades.costsForLevel(augerLevel + 1);
+                if (!options.isEmpty()) {
+                    MutableComponent optionsText = Component.empty();
+                    for (int i = 0; i < options.size(); i++) {
+                        if (i > 0) {
+                            optionsText.append(Component.translatable(
+                                    "item.tunnel_auger.tunnel_auger.line_ritual_or"));
+                        }
+                        AugerUpgrades.Cost cost = options.get(i);
+                        optionsText.append(Component.translatable(
+                                "item.tunnel_auger.tunnel_auger.line_ritual_option",
+                                cost.count(),
+                                Component.translatable(cost.material().getDescriptionId())));
+                    }
                     lines.add(insertIdx++, Component.translatable(
                             "item.tunnel_auger.tunnel_auger.line_ritual",
                             Component.translatable(Items.HEART_OF_THE_SEA.getDescriptionId()),
-                            cost.count(),
-                            Component.translatable(cost.material().getDescriptionId())));
+                            optionsText));
                 }
             }
         } else {
